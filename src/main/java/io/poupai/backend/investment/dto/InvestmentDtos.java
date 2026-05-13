@@ -24,10 +24,12 @@ public class InvestmentDtos {
         @NotNull(message = "Tipo é obrigatório")
         private Investment.InvestmentType type;
 
-        @NotNull @PositiveOrZero
+        @NotNull
+        @PositiveOrZero
         private Double currentValue;
 
-        @NotNull @PositiveOrZero
+        @NotNull
+        @PositiveOrZero
         private Double investedValue;
 
         @PositiveOrZero
@@ -37,11 +39,11 @@ public class InvestmentDtos {
         private Double allocationTarget;
     }
 
-    // ─── Atualizar ativo (só metadados — aportes vão para Entry) ───
+    // ─── Atualizar ativo (metadados) ───
     @Data
     public static class UpdateRequest {
         private String name;
-        private Double currentValue;     // Atualização manual de valor
+        private Double currentValue;
         private Double allocationTarget;
     }
 
@@ -74,7 +76,7 @@ public class InvestmentDtos {
         private Double profitability;
     }
 
-    // ─── Lançamento no livro contábil ───
+    // ─── Lançamento ───
     @Data
     public static class CreateEntryRequest {
         @NotBlank
@@ -83,17 +85,21 @@ public class InvestmentDtos {
         @NotNull
         private InvestmentEntry.EntryType type;
 
-        // Para APORTE e RESGATE
+        // APORTE / RESGATE
         private Double shares;
         private Double sharePrice;
 
-        // Para ATUALIZACAO_VALOR
+        // ATUALIZACAO_VALOR
         private Double newCurrentValue;
+
+        // AJUSTE_POSICAO — sobrescreve posição legada
+        private Double adjustedShares;       // Quantidade atual de cotas
+        private Double adjustedAveragePrice; // PM atual
 
         private String notes;
 
         @NotBlank
-        private String date; // "yyyy-MM-dd"
+        private String date;
     }
 
     @Data
@@ -112,6 +118,8 @@ public class InvestmentDtos {
         private Double previousAveragePrice;
         private Double newAveragePrice;
         private Double newTotalShares;
+        private Double adjustedShares;
+        private Double adjustedAveragePrice;
         private String notes;
         private String date;
     }
@@ -133,7 +141,8 @@ public class InvestmentDtos {
         @NotBlank
         private String investmentId;
 
-        @NotNull @PositiveOrZero
+        @NotNull
+        @PositiveOrZero
         private Double amount;
 
         @NotNull
