@@ -33,6 +33,16 @@ public class TransactionDtos {
         private String tagId;
     }
 
+    // ─── Edição — todos os campos são opcionais ───
+    @Data
+    public static class UpdateRequest {
+        private String title;
+        private Double amount;
+        private Transaction.TransactionType type;
+        private String category;
+        private String date;
+    }
+
     @Data
     @Builder
     @NoArgsConstructor

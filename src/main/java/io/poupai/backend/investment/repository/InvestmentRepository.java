@@ -8,8 +8,7 @@ import java.util.List;
 
 @Repository
 public interface InvestmentRepository extends MongoRepository<Investment, String> {
-
     List<Investment> findByUserId(String userId);
-
     List<Investment> findByUserIdAndType(String userId, Investment.InvestmentType type);
+    List<Investment> findByUserIdAndNameIgnoreCase(String userId, String name);
 }

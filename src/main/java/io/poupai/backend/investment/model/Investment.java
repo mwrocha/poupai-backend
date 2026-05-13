@@ -11,6 +11,8 @@ import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Builder
@@ -31,6 +33,21 @@ public class Investment {
     private Double investedValue;
     private Double profitability;
 
+    // ─── Preço médio ───
+    @Builder.Default
+    private Double shares = 0.0;           // Quantidade de cotas/ações
+
+    @Builder.Default
+    private Double averagePrice = 0.0;     // Preço médio calculado
+
+    // ─── Rebalanceamento ───
+    @Builder.Default
+    private Double allocationTarget = 0.0; // % alvo definido pelo usuário (0-100)
+
+    // ─── Histórico de rentabilidade ───
+    @Builder.Default
+    private List<ProfitabilitySnapshot> history = new ArrayList<>();
+
     @CreatedDate
     private LocalDateTime createdAt;
 
@@ -41,5 +58,16 @@ public class Investment {
         RENDA_VARIAVEL,
         RENDA_FIXA,
         CRIPTOMOEDAS
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class ProfitabilitySnapshot {
+        private String date;        // "yyyy-MM-dd"
+        private Double value;       // Valor atual na data
+        private Double invested;    // Total investido na data
+        private Double profitability; // % na data
     }
 }

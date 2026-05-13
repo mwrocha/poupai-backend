@@ -16,6 +16,7 @@ public class FinanceController {
 
     private final FinanceService financeService;
 
+    // Resumo dos últimos N meses (endpoint original, agora com mais dados)
     @GetMapping("/summary")
     public ResponseEntity<ApiResponse<FinanceDtos.FinanceSummaryResponse>> getSummary(
             @AuthenticationPrincipal UserDetails userDetails,
@@ -24,5 +25,17 @@ public class FinanceController {
         FinanceDtos.FinanceSummaryResponse summary =
                 financeService.getSummary(userDetails.getUsername(), months);
         return ResponseEntity.ok(ApiResponse.success("Resumo financeiro recuperado", summary));
+    }
+
+    // Resumo de um mês/ano específico
+    @GetMapping("/summary/period")
+    public ResponseEntity<ApiResponse<FinanceDtos.FinanceSummaryResponse>> getSummaryByPeriod(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestParam int month,
+            @RequestParam int year
+    ) {
+        FinanceDtos.FinanceSummaryResponse summary =
+                financeService.getSummaryByPeriod(userDetails.getUsername(), month, year);
+        return ResponseEntity.ok(ApiResponse.success("Resumo do período recuperado", summary));
     }
 }

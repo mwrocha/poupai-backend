@@ -26,14 +26,10 @@ public class TransactionController {
             @RequestParam(required = false) Integer month
     ) {
         String userId = getUserId(userDetails);
-        List<TransactionDtos.TransactionResponse> transactions;
-
-        if (year != null && month != null) {
-            transactions = transactionService.getByMonth(userId, year, month);
-        } else {
-            transactions = transactionService.getAll(userId);
-        }
-
+        List<TransactionDtos.TransactionResponse> transactions =
+                (year != null && month != null)
+                        ? transactionService.getByMonth(userId, year, month)
+                        : transactionService.getAll(userId);
         return ResponseEntity.ok(ApiResponse.success("Transações recuperadas", transactions));
     }
 
@@ -42,9 +38,20 @@ public class TransactionController {
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody TransactionDtos.CreateRequest request
     ) {
-        String userId = getUserId(userDetails);
-        TransactionDtos.TransactionResponse response = transactionService.create(userId, request);
+        TransactionDtos.TransactionResponse response =
+                transactionService.create(getUserId(userDetails), request);
         return ResponseEntity.ok(ApiResponse.success("Transação criada", response));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<TransactionDtos.TransactionResponse>> update(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable String id,
+            @RequestBody TransactionDtos.UpdateRequest request
+    ) {
+        TransactionDtos.TransactionResponse response =
+                transactionService.update(getUserId(userDetails), id, request);
+        return ResponseEntity.ok(ApiResponse.success("Transação atualizada", response));
     }
 
     @DeleteMapping("/{id}")
@@ -56,7 +63,6 @@ public class TransactionController {
         return ResponseEntity.ok(ApiResponse.success("Transação deletada", null));
     }
 
-    // Por ora o userId é o próprio email — quando tiver campo ID separado, buscar do banco
     private String getUserId(UserDetails userDetails) {
         return userDetails.getUsername();
     }
