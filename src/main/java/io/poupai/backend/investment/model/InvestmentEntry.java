@@ -28,7 +28,7 @@ public class InvestmentEntry {
     @Indexed
     private String investmentId;
 
-    private String investmentName; // normalizado
+    private String investmentName;
 
     private EntryType type;
 
@@ -36,12 +36,16 @@ public class InvestmentEntry {
     private Double sharePrice;            // Preço por cota
     private Double totalValue;            // Valor total (shares * sharePrice)
 
-    private Double previousShares;        // Cotas antes da movimentação
-    private Double previousAveragePrice;  // PM antes da movimentação
+    private Double previousShares;        // Cotas antes
+    private Double previousAveragePrice;  // PM antes
     private Double newAveragePrice;       // PM após (calculado)
     private Double newTotalShares;        // Total de cotas após
 
-    private String notes;                 // Observação opcional
+    // ─── Campos específicos de AJUSTE_POSICAO ───
+    private Double adjustedShares;        // Cotas informadas no ajuste
+    private Double adjustedAveragePrice;  // PM informado no ajuste
+
+    private String notes;
 
     private LocalDate date;
 
@@ -49,8 +53,6 @@ public class InvestmentEntry {
     private LocalDateTime createdAt;
 
     public enum EntryType {
-        APORTE,
-        RESGATE,
-        ATUALIZACAO_VALOR,
+        APORTE, RESGATE, ATUALIZACAO_VALOR, AJUSTE_POSICAO,   // Migração de posição legada — sobrescreve shares e PM
     }
 }
