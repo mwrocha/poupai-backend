@@ -43,11 +43,35 @@ public class TransactionService {
                 .build();
 
         TransactionDtos.TransactionResponse response = toResponse(transactionRepository.save(transaction));
-
-        // ─── Gamificação ───
         gamificationService.onTransactionCreated(userId);
-
         return response;
+    }
+
+    public TransactionDtos.TransactionResponse update(String userId, String transactionId, TransactionDtos.UpdateRequest request) {
+        Transaction transaction = transactionRepository.findById(transactionId)
+                .orElseThrow(() -> new RuntimeException("Transação não encontrada"));
+
+        if (!transaction.getUserId().equals(userId)) {
+            throw new RuntimeException("Sem permissão para editar esta transação");
+        }
+
+        if (request.getTitle() != null && !request.getTitle().isBlank()) {
+            transaction.setTitle(request.getTitle());
+        }
+        if (request.getAmount() != null && request.getAmount() > 0) {
+            transaction.setAmount(request.getAmount());
+        }
+        if (request.getType() != null) {
+            transaction.setType(request.getType());
+        }
+        if (request.getCategory() != null && !request.getCategory().isBlank()) {
+            transaction.setCategory(request.getCategory());
+        }
+        if (request.getDate() != null && !request.getDate().isBlank()) {
+            transaction.setDate(LocalDate.parse(request.getDate()));
+        }
+
+        return toResponse(transactionRepository.save(transaction));
     }
 
     public void delete(String userId, String transactionId) {
