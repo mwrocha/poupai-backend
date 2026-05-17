@@ -34,37 +34,20 @@ public class InvestmentService {
     // ─── CRUD ATIVO ───
 
     public List<InvestmentDtos.InvestmentResponse> getAll(String userId) {
-        return investmentRepository.findByUserId(userId)
-                .stream().map(this::toResponse).collect(Collectors.toList());
+        return investmentRepository.findByUserId(userId).stream().map(this::toResponse).collect(Collectors.toList());
     }
 
     public InvestmentDtos.InvestmentResponse create(String userId, InvestmentDtos.CreateRequest request) {
         double shares = request.getShares() != null ? request.getShares() : 0.0;
-        double avgPrice = (shares > 0 && request.getInvestedValue() > 0)
-                ? request.getInvestedValue() / shares : 0.0;
-        double profitability = request.getInvestedValue() > 0
-                ? ((request.getCurrentValue() - request.getInvestedValue()) / request.getInvestedValue()) * 100 : 0.0;
+        double avgPrice = (shares > 0 && request.getInvestedValue() > 0) ? request.getInvestedValue() / shares : 0.0;
+        double profitability = request.getInvestedValue() > 0 ? ((request.getCurrentValue() - request.getInvestedValue()) / request.getInvestedValue()) * 100 : 0.0;
 
-        Investment investment = Investment.builder()
-                .userId(userId).name(request.getName()).type(request.getType())
-                .currentValue(request.getCurrentValue()).investedValue(request.getInvestedValue())
-                .profitability(profitability).shares(shares).averagePrice(avgPrice)
-                .allocationTarget(request.getAllocationTarget() != null ? request.getAllocationTarget() : 0.0)
-                .build();
+        Investment investment = Investment.builder().userId(userId).name(request.getName()).type(request.getType()).currentValue(request.getCurrentValue()).investedValue(request.getInvestedValue()).profitability(profitability).shares(shares).averagePrice(avgPrice).allocationTarget(request.getAllocationTarget() != null ? request.getAllocationTarget() : 0.0).build();
 
         Investment saved = investmentRepository.save(investment);
 
         if (shares > 0 && avgPrice > 0) {
-            entryRepository.save(InvestmentEntry.builder()
-                    .userId(userId).investmentId(saved.getId())
-                    .investmentName(saved.getName())
-                    .type(InvestmentEntry.EntryType.APORTE)
-                    .shares(shares).sharePrice(avgPrice)
-                    .totalValue(request.getInvestedValue())
-                    .previousShares(0.0).previousAveragePrice(0.0)
-                    .newAveragePrice(avgPrice).newTotalShares(shares)
-                    .date(LocalDate.now()).notes("Aporte inicial")
-                    .build());
+            entryRepository.save(InvestmentEntry.builder().userId(userId).investmentId(saved.getId()).investmentName(saved.getName()).type(InvestmentEntry.EntryType.APORTE).shares(shares).sharePrice(avgPrice).totalValue(request.getInvestedValue()).previousShares(0.0).previousAveragePrice(0.0).newAveragePrice(avgPrice).newTotalShares(shares).date(LocalDate.now()).notes("Aporte inicial").build());
         }
 
         gamificationService.onInvestmentCreated(userId);
@@ -72,46 +55,33 @@ public class InvestmentService {
     }
 
     public InvestmentDtos.InvestmentResponse update(String userId, String id, InvestmentDtos.UpdateRequest request) {
-        Investment investment = investmentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Investimento não encontrado"));
+        Investment investment = investmentRepository.findById(id).orElseThrow(() -> new RuntimeException("Investimento não encontrado"));
         if (!investment.getUserId().equals(userId)) throw new RuntimeException("Sem permissão");
 
-        if (request.getName() != null && !request.getName().isBlank())
-            investment.setName(request.getName());
-        if (request.getAllocationTarget() != null)
-            investment.setAllocationTarget(request.getAllocationTarget());
+        if (request.getName() != null && !request.getName().isBlank()) investment.setName(request.getName());
+        if (request.getAllocationTarget() != null) investment.setAllocationTarget(request.getAllocationTarget());
 
-        if (request.getCurrentValue() != null) {
-            double profSnap = investment.getInvestedValue() > 0
-                    ? ((request.getCurrentValue() - investment.getInvestedValue()) / investment.getInvestedValue()) * 100 : 0.0;
-            investment.getHistory().add(Investment.ProfitabilitySnapshot.builder()
-                    .date(LocalDate.now().toString()).value(request.getCurrentValue())
-                    .invested(investment.getInvestedValue()).profitability(profSnap)
-                    .build());
+        if (request.getShares() != null) investment.setShares(request.getShares());
+        if (request.getAveragePrice() != null) investment.setAveragePrice(request.getAveragePrice());
+        if (request.getInvestedValue() != null) investment.setInvestedValue(request.getInvestedValue());
+
+        if (investment.getShares() != null && investment.getShares() > 0
+                && investment.getAveragePrice() != null && investment.getAveragePrice() > 0) {
+            investment.setCurrentValue(investment.getShares() * investment.getAveragePrice());
+        } else if (request.getCurrentValue() != null) {
             investment.setCurrentValue(request.getCurrentValue());
-
-            entryRepository.save(InvestmentEntry.builder()
-                    .userId(userId).investmentId(investment.getId())
-                    .investmentName(investment.getName())
-                    .type(InvestmentEntry.EntryType.ATUALIZACAO_VALOR)
-                    .totalValue(request.getCurrentValue())
-                    .previousShares(investment.getShares())
-                    .previousAveragePrice(investment.getAveragePrice())
-                    .newAveragePrice(investment.getAveragePrice())
-                    .newTotalShares(investment.getShares())
-                    .date(LocalDate.now()).build());
         }
 
         double profitability = investment.getInvestedValue() > 0
-                ? ((investment.getCurrentValue() - investment.getInvestedValue()) / investment.getInvestedValue()) * 100 : 0.0;
+                ? ((investment.getCurrentValue() - investment.getInvestedValue()) / investment.getInvestedValue()) * 100
+                : 0.0;
         investment.setProfitability(profitability);
 
         return toResponse(investmentRepository.save(investment));
     }
 
     public void delete(String userId, String id) {
-        Investment investment = investmentRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Investimento não encontrado"));
+        Investment investment = investmentRepository.findById(id).orElseThrow(() -> new RuntimeException("Investimento não encontrado"));
         if (!investment.getUserId().equals(userId)) throw new RuntimeException("Sem permissão");
         investmentRepository.delete(investment);
     }
@@ -122,31 +92,21 @@ public class InvestmentService {
         List<InvestmentEntry> entries;
         if (year != null && month != null) {
             YearMonth ym = YearMonth.of(year, month);
-            entries = investmentId != null && !investmentId.isBlank()
-                    ? entryRepository.findByUserIdAndInvestmentIdAndDateBetweenOrderByDateDesc(userId, investmentId, ym.atDay(1), ym.atEndOfMonth())
-                    : entryRepository.findByUserIdAndDateBetweenOrderByDateDesc(userId, ym.atDay(1), ym.atEndOfMonth());
+            entries = investmentId != null && !investmentId.isBlank() ? entryRepository.findByUserIdAndInvestmentIdAndDateBetweenOrderByDateDesc(userId, investmentId, ym.atDay(1), ym.atEndOfMonth()) : entryRepository.findByUserIdAndDateBetweenOrderByDateDesc(userId, ym.atDay(1), ym.atEndOfMonth());
         } else if (investmentId != null && !investmentId.isBlank()) {
             entries = entryRepository.findByUserIdAndInvestmentIdOrderByDateDesc(userId, investmentId);
         } else {
             entries = entryRepository.findByUserIdOrderByDateDesc(userId);
         }
 
-        double totalAported = entries.stream()
-                .filter(e -> e.getType() == InvestmentEntry.EntryType.APORTE)
-                .mapToDouble(InvestmentEntry::getTotalValue).sum();
-        double totalRescued = entries.stream()
-                .filter(e -> e.getType() == InvestmentEntry.EntryType.RESGATE)
-                .mapToDouble(InvestmentEntry::getTotalValue).sum();
+        double totalAported = entries.stream().filter(e -> e.getType() == InvestmentEntry.EntryType.APORTE).mapToDouble(InvestmentEntry::getTotalValue).sum();
+        double totalRescued = entries.stream().filter(e -> e.getType() == InvestmentEntry.EntryType.RESGATE).mapToDouble(InvestmentEntry::getTotalValue).sum();
 
-        return InvestmentDtos.EntrySummaryResponse.builder()
-                .entries(entries.stream().map(this::toEntryResponse).collect(Collectors.toList()))
-                .totalAported(totalAported).totalRescued(totalRescued)
-                .totalEntries((long) entries.size()).build();
+        return InvestmentDtos.EntrySummaryResponse.builder().entries(entries.stream().map(this::toEntryResponse).collect(Collectors.toList())).totalAported(totalAported).totalRescued(totalRescued).totalEntries((long) entries.size()).build();
     }
 
     public InvestmentDtos.EntryResponse addEntry(String userId, InvestmentDtos.CreateEntryRequest request) {
-        Investment investment = investmentRepository.findById(request.getInvestmentId())
-                .orElseThrow(() -> new RuntimeException("Investimento não encontrado"));
+        Investment investment = investmentRepository.findById(request.getInvestmentId()).orElseThrow(() -> new RuntimeException("Investimento não encontrado"));
         if (!investment.getUserId().equals(userId)) throw new RuntimeException("Sem permissão");
 
         double prevShares = investment.getShares() != null ? investment.getShares() : 0.0;
@@ -155,12 +115,7 @@ public class InvestmentService {
         double newTotalShares = prevShares;
         double totalValue = 0.0;
 
-        InvestmentEntry.InvestmentEntryBuilder entryBuilder = InvestmentEntry.builder()
-                .userId(userId).investmentId(investment.getId())
-                .investmentName(investment.getName()).type(request.getType())
-                .previousShares(prevShares).previousAveragePrice(prevAvgPrice)
-                .notes(request.getNotes())
-                .date(LocalDate.parse(request.getDate()));
+        InvestmentEntry.InvestmentEntryBuilder entryBuilder = InvestmentEntry.builder().userId(userId).investmentId(investment.getId()).investmentName(investment.getName()).type(request.getType()).previousShares(prevShares).previousAveragePrice(prevAvgPrice).notes(request.getNotes()).date(LocalDate.parse(request.getDate()));
 
         switch (request.getType()) {
 
@@ -171,15 +126,13 @@ public class InvestmentService {
                 newTotalShares = prevShares + shares;
 
                 // ─── Fórmula de preço médio ponderado ───
-                newAvgPrice = newTotalShares > 0
-                        ? (prevAvgPrice * prevShares + price * shares) / newTotalShares : 0.0;
+                newAvgPrice = newTotalShares > 0 ? (prevAvgPrice * prevShares + price * shares) / newTotalShares : 0.0;
 
                 investment.setShares(newTotalShares);
                 investment.setAveragePrice(newAvgPrice);
                 investment.setInvestedValue(investment.getInvestedValue() + totalValue);
 
-                entryBuilder.shares(shares).sharePrice(price).totalValue(totalValue)
-                        .newAveragePrice(newAvgPrice).newTotalShares(newTotalShares);
+                entryBuilder.shares(shares).sharePrice(price).totalValue(totalValue).newAveragePrice(newAvgPrice).newTotalShares(newTotalShares);
             }
 
             case RESGATE -> {
@@ -191,48 +144,32 @@ public class InvestmentService {
                 investment.setShares(newTotalShares);
                 investment.setInvestedValue(Math.max(0, investment.getInvestedValue() - (prevAvgPrice * shares)));
 
-                entryBuilder.shares(shares).sharePrice(price).totalValue(totalValue)
-                        .newAveragePrice(prevAvgPrice).newTotalShares(newTotalShares);
+                entryBuilder.shares(shares).sharePrice(price).totalValue(totalValue).newAveragePrice(prevAvgPrice).newTotalShares(newTotalShares);
             }
 
             case ATUALIZACAO_VALOR -> {
                 if (request.getNewCurrentValue() != null) {
-                    totalValue = request.getNewCurrentValue();
-                    double profSnap = investment.getInvestedValue() > 0
-                            ? ((request.getNewCurrentValue() - investment.getInvestedValue()) / investment.getInvestedValue()) * 100 : 0.0;
-                    investment.getHistory().add(Investment.ProfitabilitySnapshot.builder()
-                            .date(request.getDate()).value(request.getNewCurrentValue())
-                            .invested(investment.getInvestedValue()).profitability(profSnap).build());
-                    investment.setCurrentValue(request.getNewCurrentValue());
+                    double newCurrentValue;
+                    // If asset has shares, input is price per share — calculate total position
+                    if (investment.getShares() != null && investment.getShares() > 0) {
+                        newCurrentValue = request.getNewCurrentValue() * investment.getShares();
+                    } else {
+                        // No shares (CDB, crypto etc) — input is total position value directly
+                        newCurrentValue = request.getNewCurrentValue();
+                    }
+                    totalValue = newCurrentValue;
+                    double profSnap = investment.getInvestedValue() > 0 ? ((newCurrentValue - investment.getInvestedValue()) / investment.getInvestedValue()) * 100 : 0.0;
+                    investment.getHistory().add(Investment.ProfitabilitySnapshot.builder().date(request.getDate()).value(newCurrentValue).invested(investment.getInvestedValue()).profitability(profSnap).build());
+                    investment.setCurrentValue(newCurrentValue);
                 }
-                entryBuilder.totalValue(totalValue)
-                        .newAveragePrice(prevAvgPrice).newTotalShares(prevShares);
+                entryBuilder.totalValue(totalValue).newAveragePrice(prevAvgPrice).newTotalShares(prevShares);
             }
 
-            case AJUSTE_POSICAO -> {
-                // ─── Sobrescreve posição legada ───
-                double adjShares = request.getAdjustedShares() != null ? request.getAdjustedShares() : 0.0;
-                double adjAvgPrice = request.getAdjustedAveragePrice() != null ? request.getAdjustedAveragePrice() : 0.0;
-
-                newTotalShares = adjShares;
-                newAvgPrice = adjAvgPrice;
-
-                // Recalcula o valor investido com base na nova posição
-                double newInvestedValue = adjShares * adjAvgPrice;
-                investment.setShares(adjShares);
-                investment.setAveragePrice(adjAvgPrice);
-                investment.setInvestedValue(newInvestedValue);
-
-                entryBuilder.adjustedShares(adjShares).adjustedAveragePrice(adjAvgPrice)
-                        .newAveragePrice(adjAvgPrice).newTotalShares(adjShares)
-                        .totalValue(newInvestedValue);
-            }
         }
 
         // Recalcula rentabilidade
         if (investment.getInvestedValue() > 0) {
-            investment.setProfitability(
-                    ((investment.getCurrentValue() - investment.getInvestedValue()) / investment.getInvestedValue()) * 100);
+            investment.setProfitability(((investment.getCurrentValue() - investment.getInvestedValue()) / investment.getInvestedValue()) * 100);
         }
         investmentRepository.save(investment);
 
@@ -240,8 +177,7 @@ public class InvestmentService {
     }
 
     public void deleteEntry(String userId, String entryId) {
-        InvestmentEntry entry = entryRepository.findById(entryId)
-                .orElseThrow(() -> new RuntimeException("Lançamento não encontrado"));
+        InvestmentEntry entry = entryRepository.findById(entryId).orElseThrow(() -> new RuntimeException("Lançamento não encontrado"));
         if (!entry.getUserId().equals(userId)) throw new RuntimeException("Sem permissão");
 
         Investment investment = investmentRepository.findById(entry.getInvestmentId()).orElse(null);
@@ -255,15 +191,7 @@ public class InvestmentService {
                 }
                 case RESGATE -> {
                     investment.setShares(entry.getPreviousShares());
-                    investment.setInvestedValue(investment.getInvestedValue()
-                            + (entry.getPreviousAveragePrice() * entry.getShares()));
-                    investmentRepository.save(investment);
-                }
-                case AJUSTE_POSICAO -> {
-                    // Reverte para a posição anterior ao ajuste
-                    investment.setShares(entry.getPreviousShares());
-                    investment.setAveragePrice(entry.getPreviousAveragePrice());
-                    investment.setInvestedValue(entry.getPreviousShares() * entry.getPreviousAveragePrice());
+                    investment.setInvestedValue(investment.getInvestedValue() + (entry.getPreviousAveragePrice() * entry.getShares()));
                     investmentRepository.save(investment);
                 }
                 default -> { /* ATUALIZACAO_VALOR não reverte */ }
@@ -286,39 +214,25 @@ public class InvestmentService {
 
         LocalDate now = LocalDate.now();
         double totalReceived = dividends.stream().mapToDouble(Dividend::getAmount).sum();
-        double thisYear = dividends.stream().filter(d -> d.getDate().getYear() == now.getYear())
-                .mapToDouble(Dividend::getAmount).sum();
-        double thisMonth = dividends.stream()
-                .filter(d -> d.getDate().getYear() == now.getYear() && d.getDate().getMonthValue() == now.getMonthValue())
-                .mapToDouble(Dividend::getAmount).sum();
+        double thisYear = dividends.stream().filter(d -> d.getDate().getYear() == now.getYear()).mapToDouble(Dividend::getAmount).sum();
+        double thisMonth = dividends.stream().filter(d -> d.getDate().getYear() == now.getYear() && d.getDate().getMonthValue() == now.getMonthValue()).mapToDouble(Dividend::getAmount).sum();
 
-        return InvestmentDtos.DividendSummaryResponse.builder()
-                .dividends(dividends.stream().map(this::toDividendResponse).collect(Collectors.toList()))
-                .totalReceived(totalReceived).totalReceivedThisYear(thisYear)
-                .totalReceivedThisMonth(thisMonth).projectedAnnual(computeProjectedAnnual(userId))
-                .build();
+        return InvestmentDtos.DividendSummaryResponse.builder().dividends(dividends.stream().map(this::toDividendResponse).collect(Collectors.toList())).totalReceived(totalReceived).totalReceivedThisYear(thisYear).totalReceivedThisMonth(thisMonth).projectedAnnual(computeProjectedAnnual(userId)).build();
     }
 
     public InvestmentDtos.DividendResponse addDividend(String userId, InvestmentDtos.CreateDividendRequest request) {
-        Investment investment = investmentRepository.findById(request.getInvestmentId())
-                .orElseThrow(() -> new RuntimeException("Investimento não encontrado"));
+        Investment investment = investmentRepository.findById(request.getInvestmentId()).orElseThrow(() -> new RuntimeException("Investimento não encontrado"));
         if (!investment.getUserId().equals(userId)) throw new RuntimeException("Sem permissão");
 
-        double yieldPercent = investment.getInvestedValue() > 0
-                ? (request.getAmount() / investment.getInvestedValue()) * 100 : 0.0;
+        double yieldPercent = investment.getInvestedValue() > 0 ? (request.getAmount() / investment.getInvestedValue()) * 100 : 0.0;
 
-        Dividend dividend = Dividend.builder()
-                .userId(userId).investmentId(investment.getId())
-                .investmentName(investment.getName()).amount(request.getAmount())
-                .yieldPercent(yieldPercent).date(LocalDate.parse(request.getDate()))
-                .type(request.getType()).build();
+        Dividend dividend = Dividend.builder().userId(userId).investmentId(investment.getId()).investmentName(investment.getName()).amount(request.getAmount()).yieldPercent(yieldPercent).date(LocalDate.parse(request.getDate())).type(request.getType()).build();
 
         return toDividendResponse(dividendRepository.save(dividend));
     }
 
     public void deleteDividend(String userId, String dividendId) {
-        Dividend dividend = dividendRepository.findById(dividendId)
-                .orElseThrow(() -> new RuntimeException("Dividendo não encontrado"));
+        Dividend dividend = dividendRepository.findById(dividendId).orElseThrow(() -> new RuntimeException("Dividendo não encontrado"));
         if (!dividend.getUserId().equals(userId)) throw new RuntimeException("Sem permissão");
         dividendRepository.delete(dividend);
     }
@@ -334,12 +248,7 @@ public class InvestmentService {
             double targetPercent = inv.getAllocationTarget() != null ? inv.getAllocationTarget() : 0.0;
             double difference = currentPercent - targetPercent;
             String action = Math.abs(difference) < 1.0 ? "OK" : difference > 0 ? "VENDER" : "COMPRAR";
-            return InvestmentDtos.RebalanceItem.builder()
-                    .investmentId(inv.getId()).name(inv.getName()).type(inv.getType().name())
-                    .currentValue(inv.getCurrentValue()).currentPercent(currentPercent)
-                    .targetPercent(targetPercent).difference(difference)
-                    .action(action).amountToAdjust(Math.abs(difference / 100.0 * total))
-                    .build();
+            return InvestmentDtos.RebalanceItem.builder().investmentId(inv.getId()).name(inv.getName()).type(inv.getType().name()).currentValue(inv.getCurrentValue()).currentPercent(currentPercent).targetPercent(targetPercent).difference(difference).action(action).amountToAdjust(Math.abs(difference / 100.0 * total)).build();
         }).collect(Collectors.toList());
 
         return InvestmentDtos.RebalanceResponse.builder().items(items).totalCurrentValue(total).build();
@@ -354,14 +263,9 @@ public class InvestmentService {
         List<Investment> investments = investmentRepository.findByUserId(userId);
         double totalInvested = investments.stream().mapToDouble(Investment::getInvestedValue).sum();
         double totalCurrent = investments.stream().mapToDouble(Investment::getCurrentValue).sum();
-        double portfolioReturn = totalInvested > 0
-                ? ((totalCurrent - totalInvested) / totalInvested) * 100 : 0.0;
+        double portfolioReturn = totalInvested > 0 ? ((totalCurrent - totalInvested) / totalInvested) * 100 : 0.0;
 
-        return InvestmentDtos.BenchmarkResponse.builder()
-                .cdiRateYear(cdiYear).cdiRateMonth(cdiMonth)
-                .portfolioReturn(portfolioReturn).vsCdi(portfolioReturn - cdiYear)
-                .lastUpdated(cdiLastFetched != null ? cdiLastFetched.toString() : "N/A")
-                .build();
+        return InvestmentDtos.BenchmarkResponse.builder().cdiRateYear(cdiYear).cdiRateMonth(cdiMonth).portfolioReturn(portfolioReturn).vsCdi(portfolioReturn - cdiYear).lastUpdated(cdiLastFetched != null ? cdiLastFetched.toString() : "N/A").build();
     }
 
     @SuppressWarnings("unchecked")
@@ -372,13 +276,10 @@ public class InvestmentService {
             DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
             String today = LocalDate.now().format(fmt);
             String oneYearAgo = LocalDate.now().minusYears(1).format(fmt);
-            String url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados?dataInicial="
-                    + oneYearAgo + "&dataFinal=" + today + "&formato=json";
+            String url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados?dataInicial=" + oneYearAgo + "&dataFinal=" + today + "&formato=json";
             List<Map<String, String>> response = restTemplate.getForObject(url, List.class);
             if (response != null && !response.isEmpty()) {
-                cachedCdiYear = response.stream()
-                        .mapToDouble(e -> Double.parseDouble(e.get("valor").replace(",", ".")))
-                        .sum();
+                cachedCdiYear = response.stream().mapToDouble(e -> Double.parseDouble(e.get("valor").replace(",", "."))).sum();
                 cdiLastFetched = LocalDate.now();
                 return cachedCdiYear;
             }
@@ -390,46 +291,23 @@ public class InvestmentService {
 
     private double computeProjectedAnnual(String userId) {
         LocalDate now = LocalDate.now();
-        List<Dividend> recent = dividendRepository.findByUserIdAndDateBetweenOrderByDateDesc(
-                userId, now.minusMonths(3), now);
+        List<Dividend> recent = dividendRepository.findByUserIdAndDateBetweenOrderByDateDesc(userId, now.minusMonths(3), now);
         return (recent.stream().mapToDouble(Dividend::getAmount).sum() / 3.0) * 12;
     }
 
     // ─── Mappers ───
 
     private InvestmentDtos.InvestmentResponse toResponse(Investment i) {
-        List<InvestmentDtos.SnapshotResponse> history = i.getHistory() == null ? List.of() :
-                i.getHistory().stream().map(s -> InvestmentDtos.SnapshotResponse.builder()
-                        .date(s.getDate()).value(s.getValue())
-                        .invested(s.getInvested()).profitability(s.getProfitability())
-                        .build()).collect(Collectors.toList());
+        List<InvestmentDtos.SnapshotResponse> history = i.getHistory() == null ? List.of() : i.getHistory().stream().map(s -> InvestmentDtos.SnapshotResponse.builder().date(s.getDate()).value(s.getValue()).invested(s.getInvested()).profitability(s.getProfitability()).build()).collect(Collectors.toList());
 
-        return InvestmentDtos.InvestmentResponse.builder()
-                .id(i.getId()).name(i.getName()).type(i.getType().name())
-                .currentValue(i.getCurrentValue()).investedValue(i.getInvestedValue())
-                .profitability(i.getProfitability()).shares(i.getShares())
-                .averagePrice(i.getAveragePrice()).allocationTarget(i.getAllocationTarget())
-                .history(history).build();
+        return InvestmentDtos.InvestmentResponse.builder().id(i.getId()).name(i.getName()).type(i.getType().name()).currentValue(i.getCurrentValue()).investedValue(i.getInvestedValue()).profitability(i.getProfitability()).shares(i.getShares()).averagePrice(i.getAveragePrice()).allocationTarget(i.getAllocationTarget()).history(history).build();
     }
 
     private InvestmentDtos.EntryResponse toEntryResponse(InvestmentEntry e) {
-        return InvestmentDtos.EntryResponse.builder()
-                .id(e.getId()).investmentId(e.getInvestmentId())
-                .investmentName(e.getInvestmentName()).type(e.getType().name())
-                .shares(e.getShares()).sharePrice(e.getSharePrice())
-                .totalValue(e.getTotalValue()).previousShares(e.getPreviousShares())
-                .previousAveragePrice(e.getPreviousAveragePrice())
-                .newAveragePrice(e.getNewAveragePrice()).newTotalShares(e.getNewTotalShares())
-                .adjustedShares(e.getAdjustedShares()).adjustedAveragePrice(e.getAdjustedAveragePrice())
-                .notes(e.getNotes()).date(e.getDate() != null ? e.getDate().toString() : null)
-                .build();
+        return InvestmentDtos.EntryResponse.builder().id(e.getId()).investmentId(e.getInvestmentId()).investmentName(e.getInvestmentName()).type(e.getType().name()).shares(e.getShares()).sharePrice(e.getSharePrice()).totalValue(e.getTotalValue()).previousShares(e.getPreviousShares()).previousAveragePrice(e.getPreviousAveragePrice()).newAveragePrice(e.getNewAveragePrice()).newTotalShares(e.getNewTotalShares()).adjustedShares(e.getAdjustedShares()).adjustedAveragePrice(e.getAdjustedAveragePrice()).notes(e.getNotes()).date(e.getDate() != null ? e.getDate().toString() : null).build();
     }
 
     private InvestmentDtos.DividendResponse toDividendResponse(Dividend d) {
-        return InvestmentDtos.DividendResponse.builder()
-                .id(d.getId()).investmentId(d.getInvestmentId())
-                .investmentName(d.getInvestmentName()).amount(d.getAmount())
-                .yieldPercent(d.getYieldPercent()).date(d.getDate().toString())
-                .type(d.getType().name()).build();
+        return InvestmentDtos.DividendResponse.builder().id(d.getId()).investmentId(d.getInvestmentId()).investmentName(d.getInvestmentName()).amount(d.getAmount()).yieldPercent(d.getYieldPercent()).date(d.getDate().toString()).type(d.getType().name()).build();
     }
 }
