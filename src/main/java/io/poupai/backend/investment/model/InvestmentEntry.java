@@ -53,6 +53,6 @@ public class InvestmentEntry {
     private LocalDateTime createdAt;
 
     public enum EntryType {
-        APORTE, RESGATE, ATUALIZACAO_VALOR, AJUSTE_POSICAO,   // Migração de posição legada — sobrescreve shares e PM
+        APORTE, RESGATE, ATUALIZACAO_VALOR
     }
 }
