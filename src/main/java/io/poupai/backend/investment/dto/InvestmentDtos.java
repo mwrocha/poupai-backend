@@ -39,11 +39,14 @@ public class InvestmentDtos {
         private Double allocationTarget;
     }
 
-    // ─── Atualizar ativo (metadados) ───
+    // ─── Atualizar ativo (metadados + posição) ───
     @Data
     public static class UpdateRequest {
         private String name;
         private Double currentValue;
+        private Double investedValue;
+        private Double shares;
+        private Double averagePrice;
         private Double allocationTarget;
     }
 
