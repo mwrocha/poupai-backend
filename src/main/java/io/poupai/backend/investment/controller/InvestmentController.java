@@ -125,4 +125,13 @@ public class InvestmentController {
         return ResponseEntity.ok(ApiResponse.success("Benchmark calculado",
                 investmentService.getBenchmark(userDetails.getUsername())));
     }
+
+    // ─── HISTÓRICO DO PORTFÓLIO ───
+
+    @GetMapping("/portfolio-history")
+    public ResponseEntity<ApiResponse<InvestmentDtos.PortfolioHistoryResponse>> getPortfolioHistory(
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return ResponseEntity.ok(ApiResponse.success("Histórico do portfólio recuperado",
+                investmentService.getPortfolioHistory(userDetails.getUsername())));
+    }
 }
