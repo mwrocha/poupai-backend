@@ -66,6 +66,13 @@ public class InvestmentDtos {
         private Double averagePrice;
         private Double allocationTarget;
         private List<SnapshotResponse> history;
+        // Retornos por janela temporal (null quando histórico insuficiente)
+        private Double return1M;
+        private Double return3M;
+        private Double return6M;
+        private Double returnYtd;
+        private Double return12M;
+        private Double returnAll;
     }
 
     @Data
@@ -205,6 +212,26 @@ public class InvestmentDtos {
         private Double difference;
         private String action;
         private Double amountToAdjust;
+    }
+
+    // ─── Histórico do portfólio consolidado ───
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PortfolioHistorySnapshotResponse {
+        private String date;          // "yyyy-MM"
+        private Double totalValue;
+        private Double totalInvested;
+        private Double profitability;
+    }
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PortfolioHistoryResponse {
+        private List<PortfolioHistorySnapshotResponse> history;
     }
 
     // ─── Benchmark ───
