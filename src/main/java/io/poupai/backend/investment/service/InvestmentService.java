@@ -14,9 +14,12 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
-import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 @Service
@@ -65,16 +68,13 @@ public class InvestmentService {
         if (request.getAveragePrice() != null) investment.setAveragePrice(request.getAveragePrice());
         if (request.getInvestedValue() != null) investment.setInvestedValue(request.getInvestedValue());
 
-        if (investment.getShares() != null && investment.getShares() > 0
-                && investment.getAveragePrice() != null && investment.getAveragePrice() > 0) {
+        if (investment.getShares() != null && investment.getShares() > 0 && investment.getAveragePrice() != null && investment.getAveragePrice() > 0) {
             investment.setCurrentValue(investment.getShares() * investment.getAveragePrice());
         } else if (request.getCurrentValue() != null) {
             investment.setCurrentValue(request.getCurrentValue());
         }
 
-        double profitability = investment.getInvestedValue() > 0
-                ? ((investment.getCurrentValue() - investment.getInvestedValue()) / investment.getInvestedValue()) * 100
-                : 0.0;
+        double profitability = investment.getInvestedValue() > 0 ? ((investment.getCurrentValue() - investment.getInvestedValue()) / investment.getInvestedValue()) * 100 : 0.0;
         investment.setProfitability(profitability);
 
         return toResponse(investmentRepository.save(investment));
@@ -273,20 +273,17 @@ public class InvestmentService {
         if (cachedCdiYear != null && LocalDate.now().equals(cdiLastFetched)) return cachedCdiYear;
         try {
             RestTemplate restTemplate = new RestTemplate();
-            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-            String today = LocalDate.now().format(fmt);
-            String oneYearAgo = LocalDate.now().minusYears(1).format(fmt);
-            String url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados?dataInicial=" + oneYearAgo + "&dataFinal=" + today + "&formato=json";
+            String url = "https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados/ultimos/1?formato=json";
             List<Map<String, String>> response = restTemplate.getForObject(url, List.class);
             if (response != null && !response.isEmpty()) {
-                cachedCdiYear = response.stream().mapToDouble(e -> Double.parseDouble(e.get("valor").replace(",", "."))).sum();
+                cachedCdiYear = Double.parseDouble(response.get(0).get("valor").replace(",", "."));
                 cdiLastFetched = LocalDate.now();
                 return cachedCdiYear;
             }
         } catch (Exception ignored) {
             if (cachedCdiYear != null) return cachedCdiYear;
         }
-        return 10.5;
+        return 10.5; // fallback
     }
 
     private double computeProjectedAnnual(String userId) {
@@ -295,12 +292,91 @@ public class InvestmentService {
         return (recent.stream().mapToDouble(Dividend::getAmount).sum() / 3.0) * 12;
     }
 
+    // ─── Histórico do portfólio ───
+
+    public InvestmentDtos.PortfolioHistoryResponse getPortfolioHistory(String userId) {
+        List<Investment> investments = investmentRepository.findByUserId(userId);
+
+        Set<String> allMonths = new TreeSet<>();
+        for (Investment inv : investments) {
+            if (inv.getHistory() != null) {
+                inv.getHistory().forEach(s -> allMonths.add(s.getDate().substring(0, 7)));
+            }
+        }
+
+        List<InvestmentDtos.PortfolioHistorySnapshotResponse> result = new ArrayList<>();
+        for (String month : allMonths) {
+            LocalDate monthEnd = YearMonth.parse(month).atEndOfMonth();
+            double totalValue = 0.0;
+            double totalInvested = 0.0;
+            boolean hasData = false;
+
+            for (Investment inv : investments) {
+                if (inv.getHistory() == null) continue;
+                java.util.Optional<Investment.ProfitabilitySnapshot> snap = inv.getHistory().stream()
+                        .filter(s -> !LocalDate.parse(s.getDate()).isAfter(monthEnd))
+                        .max(Comparator.comparing(s -> LocalDate.parse(s.getDate())));
+                if (snap.isPresent()) {
+                    totalValue += snap.get().getValue();
+                    totalInvested += snap.get().getInvested();
+                    hasData = true;
+                }
+            }
+
+            if (hasData) {
+                double profitability = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested) * 100 : 0.0;
+                result.add(InvestmentDtos.PortfolioHistorySnapshotResponse.builder()
+                        .date(month)
+                        .totalValue(totalValue)
+                        .totalInvested(totalInvested)
+                        .profitability(profitability)
+                        .build());
+            }
+        }
+
+        return InvestmentDtos.PortfolioHistoryResponse.builder().history(result).build();
+    }
+
     // ─── Mappers ───
 
     private InvestmentDtos.InvestmentResponse toResponse(Investment i) {
         List<InvestmentDtos.SnapshotResponse> history = i.getHistory() == null ? List.of() : i.getHistory().stream().map(s -> InvestmentDtos.SnapshotResponse.builder().date(s.getDate()).value(s.getValue()).invested(s.getInvested()).profitability(s.getProfitability()).build()).collect(Collectors.toList());
 
-        return InvestmentDtos.InvestmentResponse.builder().id(i.getId()).name(i.getName()).type(i.getType().name()).currentValue(i.getCurrentValue()).investedValue(i.getInvestedValue()).profitability(i.getProfitability()).shares(i.getShares()).averagePrice(i.getAveragePrice()).allocationTarget(i.getAllocationTarget()).history(history).build();
+        LocalDate today = LocalDate.now();
+        return InvestmentDtos.InvestmentResponse.builder()
+                .id(i.getId()).name(i.getName()).type(i.getType().name())
+                .currentValue(i.getCurrentValue()).investedValue(i.getInvestedValue())
+                .profitability(i.getProfitability()).shares(i.getShares())
+                .averagePrice(i.getAveragePrice()).allocationTarget(i.getAllocationTarget())
+                .history(history)
+                .return1M(computeWindowReturn(i, today.minusDays(30)))
+                .return3M(computeWindowReturn(i, today.minusDays(90)))
+                .return6M(computeWindowReturn(i, today.minusDays(180)))
+                .returnYtd(computeWindowReturn(i, LocalDate.of(today.getYear(), 1, 1)))
+                .return12M(computeWindowReturn(i, today.minusDays(365)))
+                .returnAll(computeAllTimeReturn(i))
+                .build();
+    }
+
+    private Double computeWindowReturn(Investment investment, LocalDate from) {
+        if (investment.getCurrentValue() == null || investment.getHistory() == null || investment.getHistory().isEmpty()) return null;
+        return investment.getHistory().stream()
+                .filter(s -> !LocalDate.parse(s.getDate()).isAfter(from))
+                .max(Comparator.comparing(s -> LocalDate.parse(s.getDate())))
+                .map(s -> s.getValue() != null && s.getValue() > 0
+                        ? ((investment.getCurrentValue() - s.getValue()) / s.getValue()) * 100
+                        : null)
+                .orElse(null);
+    }
+
+    private Double computeAllTimeReturn(Investment investment) {
+        if (investment.getCurrentValue() == null || investment.getHistory() == null || investment.getHistory().isEmpty()) return null;
+        return investment.getHistory().stream()
+                .min(Comparator.comparing(s -> LocalDate.parse(s.getDate())))
+                .map(s -> s.getValue() != null && s.getValue() > 0
+                        ? ((investment.getCurrentValue() - s.getValue()) / s.getValue()) * 100
+                        : null)
+                .orElse(null);
     }
 
     private InvestmentDtos.EntryResponse toEntryResponse(InvestmentEntry e) {
