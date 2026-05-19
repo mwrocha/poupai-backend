@@ -7,4 +7,3 @@ target/
 *.DS_Store
 .env
 application-prod.yml
-application-local.yml
