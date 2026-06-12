@@ -68,9 +68,11 @@ public class InvestmentService {
         if (request.getAveragePrice() != null) investment.setAveragePrice(request.getAveragePrice());
         if (request.getInvestedValue() != null) investment.setInvestedValue(request.getInvestedValue());
 
-        if (investment.getShares() != null && investment.getShares() > 0 && investment.getAveragePrice() != null && investment.getAveragePrice() > 0) {
-            investment.setCurrentValue(investment.getShares() * investment.getAveragePrice());
-        } else if (request.getCurrentValue() != null) {
+        // O currentValue (valor de mercado) só muda quando explicitamente enviado no request
+        // — a edição do app preserva e reenvia o valor — ou via lançamento de ATUALIZACAO_VALOR.
+        // NUNCA recalcular a partir de shares × averagePrice: isso apagaria o valor real a cada
+        // update (inclusive ao só definir o % alvo de alocação), zerando a rentabilidade.
+        if (request.getCurrentValue() != null) {
             investment.setCurrentValue(request.getCurrentValue());
         }
 
