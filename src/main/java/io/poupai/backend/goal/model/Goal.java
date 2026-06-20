@@ -37,4 +37,13 @@ public class Goal {
 
     @LastModifiedDate
     private LocalDateTime updatedAt;
+
+    /**
+     * Definição única de "meta concluída", alinhada ao frontend
+     * (targetValue > 0 && currentValue >= targetValue).
+     */
+    public boolean isCompleted() {
+        return targetValue != null && targetValue > 0
+                && currentValue != null && currentValue >= targetValue;
+    }
 }

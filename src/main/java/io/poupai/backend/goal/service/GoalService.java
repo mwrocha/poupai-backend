@@ -47,14 +47,14 @@ public class GoalService {
         if (!goal.getUserId().equals(userId))
             throw new RuntimeException("Sem permissão para editar esta meta");
 
-        boolean wasCompleted = goal.getCurrentValue() >= goal.getTargetValue();
+        boolean wasCompleted = goal.isCompleted();
         goal.setCurrentValue(request.getCurrentValue());
         GoalDtos.GoalResponse response = toResponse(goalRepository.save(goal));
 
-        // ─── Gamificação — dispara apenas quando completa pela primeira vez ───
-        boolean isNowCompleted = request.getCurrentValue() >= goal.getTargetValue();
-        if (!wasCompleted && isNowCompleted) {
-            gamificationService.onGoalCompleted(userId);
+        // ─── Gamificação — transição "não-concluída → concluída".
+        // A idempotência real (não recreditar a mesma meta) vive no GamificationService. ───
+        if (!wasCompleted && goal.isCompleted()) {
+            gamificationService.onGoalCompleted(userId, goal.getId());
         }
 
         return response;

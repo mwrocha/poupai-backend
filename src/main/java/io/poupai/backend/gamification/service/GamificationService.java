@@ -1,9 +1,12 @@
 package io.poupai.backend.gamification.service;
 
 import io.poupai.backend.gamification.dto.GamificationDtos;
+import io.poupai.backend.gamification.model.AwardedAchievement;
 import io.poupai.backend.gamification.model.Gamification;
+import io.poupai.backend.gamification.repository.AwardedAchievementRepository;
 import io.poupai.backend.gamification.repository.GamificationRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -15,7 +18,11 @@ import java.util.List;
 @RequiredArgsConstructor
 public class GamificationService {
 
+    public static final String GOAL_COMPLETED = "GOAL_COMPLETED";
+    private static final int GOAL_COMPLETED_POINTS = 50;
+
     private final GamificationRepository gamificationRepository;
+    private final AwardedAchievementRepository awardedRepository;
 
     // ─── Definição de todos os badges ───
     private static final List<BadgeDefinition> ALL_BADGES = Arrays.asList(
@@ -74,13 +81,48 @@ public class GamificationService {
         gamificationRepository.save(g);
     }
 
-    // ─── Evento: meta concluída ───
-    public void onGoalCompleted(String userId) {
+    // ─── Evento: meta concluída (idempotente por goalId) ───
+    public void onGoalCompleted(String userId, String goalId) {
+        // Fast-path: já creditado para esta meta
+        if (awardedRepository.existsByUserIdAndAchievementKeyAndEntityId(userId, GOAL_COMPLETED, goalId)) {
+            return;
+        }
+
+        // Barreira durável: o índice único garante crédito único mesmo sob concorrência
+        try {
+            awardedRepository.insert(AwardedAchievement.builder()
+                    .userId(userId)
+                    .achievementKey(GOAL_COMPLETED)
+                    .entityId(goalId)
+                    .build());
+        } catch (DuplicateKeyException e) {
+            return; // corrida — outra chamada já creditou
+        }
+
+        Gamification g = getOrCreate(userId);
+        g.setCompletedGoals(g.getCompletedGoals() + 1);
+        g.setTotalPoints(g.getTotalPoints() + GOAL_COMPLETED_POINTS);
+        checkBadges(g);
+        gamificationRepository.save(g);
+    }
+
+    /**
+     * Recálculo usado pela migração de histórico.
+     * Corrige cirurgicamente os pontos: remove os pontos de conclusão antigos
+     * (possivelmente inflados) e aplica os reais. Reavalia os badges do zero
+     * a partir dos contadores corrigidos. Preserva streak (não é derivável).
+     * Idempotente: rodar novamente não altera o resultado.
+     */
+    public void recomputeCompletedGoals(String userId, int actualCompletedCount) {
         Gamification g = getOrCreate(userId);
 
-        g.setCompletedGoals(g.getCompletedGoals() + 1);
-        g.setTotalPoints(g.getTotalPoints() + 50);
+        int previousCompleted = g.getCompletedGoals();
+        g.setTotalPoints(g.getTotalPoints()
+                - previousCompleted * GOAL_COMPLETED_POINTS
+                + actualCompletedCount * GOAL_COMPLETED_POINTS);
+        g.setCompletedGoals(actualCompletedCount);
 
+        g.getUnlockedBadges().clear();
         checkBadges(g);
 
         gamificationRepository.save(g);
